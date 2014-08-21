@@ -17,23 +17,23 @@ Module = function(arg1, arg2) {
 
 Module.prototype.Module = function(arg1, arg2) {
     var module = Object.create(Module.prototype);
-    module.parentBus = this.bus;
+    module.parentModule = this;
     module.bus = new Bus();
     module.storage = {};
     if (arguments.length == 2) {
         module.name = arg2;
-        arg1.bind(this)();
+        arg1.bind(module)();
     } else {
         module.name = arg1[1];
-        arg1[0].bind(this)();
+        arg1[0].bind(module)();
     }
     return module;
 }
 
 Module.prototype.connect = function(wires){
     for (var wireName in wires) {
-        this.parentBus[wireName].connectWire(wires[wireName]);
-        wires[wireName].connectWire(this.parentBus[wireName]);
+        this.parentModule.bus[wires[wireName]].connectWire(this.bus[wireName]);
+        this.bus[wireName].connectWire(this.parentModule.bus[wires[wireName]]);
     }
 }
 
@@ -127,6 +127,12 @@ Bus.prototype.newWire = function(wireName){
 Wire = function(){}
 
 Wire.prototype.send = function(signal){
+    this._sendToUnits(signal);
+    this._sendToWires(signal);
+    this._sendToProbes(signal);
+}
+
+Wire.prototype._sendToUnits = function(signal){
     for (var idx in this.connectedUnits){
         var unit = this.connectedUnits[idx].unit;
         var portName = this.connectedUnits[idx].portName;
@@ -141,10 +147,16 @@ Wire.prototype.send = function(signal){
             }
         }
     }
+}
+
+Wire.prototype._sendToWires = function(signal){
     for (var wire in this.connectedWires){
-        if (wire.connectedWires.indexOf(this) == -1)
-            wire.send(signal);
+        this.connectedWires[wire]._sendToUnits(signal);
+        this.connectedWires[wire]._sendToProbes(signal);
     }
+}
+
+Wire.prototype._sendToProbes = function(signal){
     for (var probe in this.connectedProbes){
         this.connectedProbes[probe].bind(this.module)(signal);
     }
