@@ -1,7 +1,6 @@
 Module = function(arg1, arg2) {
     if (this instanceof Module) {
         this.bus = new Bus();
-        this.storage = {};
         if (arguments.length == 2) {
             this.name = arg2;
             arg1.bind(this)();
@@ -19,7 +18,6 @@ Module.prototype.Module = function(arg1, arg2) {
     var module = Object.create(Module.prototype);
     module.parentModule = this;
     module.bus = new Bus();
-    module.storage = {};
     if (arguments.length == 2) {
         module.name = arg2;
         arg1.bind(module)();
@@ -54,6 +52,7 @@ Module.prototype.Unit = function(arg1, arg2) {
 }
 
 Module.prototype.Storage = function(data){
+    this.storage = {};
     for (var storageMethod in data){
         for (var wireName in data[storageMethod]){
             var storageCell = data[storageMethod][wireName];
@@ -109,7 +108,7 @@ Unit.prototype.connect = function(portWirePairs){
 Unit.prototype.yield = function(output){
     for (var portName in output){
         var wire = this.portBindings[portName];
-        wire.send(output[portName]);
+        wire.send(output[portName], this);
     }
 }
 
@@ -126,7 +125,11 @@ Bus.prototype.newWire = function(wireName){
 
 Wire = function(){}
 
-Wire.prototype.send = function(signal){
+Wire.prototype.send = function(signal, sender){
+    this.trace = {
+        "sender": sender,
+        "signal": signal
+    };
     this._sendToUnits(signal);
     this._sendToWires(signal);
     this._sendToProbes(signal);
@@ -138,7 +141,7 @@ Wire.prototype._sendToUnits = function(signal){
         var portName = this.connectedUnits[idx].portName;
         if (unit.inputPorts.indexOf(portName) != -1){
             if (unit.pendingInputData.hasOwnProperty(portName))
-                console.log("Warning: signal on \"" + this.name + "\" wire that came to port \"" + portName + "\" of Unit \"" + unit.name + "\" was dropped.");
+                console.log("Warning: signal on \"" + this.name + "\" wire that came to port \"" + portName + "\" of Unit \"" + unit.name + "\" was overwritten by another one.");
             unit.pendingInputData[portName] = signal;
             if (Object.keys(unit.pendingInputData).length == unit.inputPorts.length){
                 var inputs = unit.pendingInputData;
@@ -151,6 +154,10 @@ Wire.prototype._sendToUnits = function(signal){
 
 Wire.prototype._sendToWires = function(signal){
     for (var wire in this.connectedWires){
+        this.connectedWires[wire].trace = {
+            "sender": this,
+            "signal": signal
+        };
         this.connectedWires[wire]._sendToUnits(signal);
         this.connectedWires[wire]._sendToProbes(signal);
     }
