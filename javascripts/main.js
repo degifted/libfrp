@@ -341,8 +341,7 @@ Wire.prototype.connectProbe = function(callback){
 
 
 
-$(document).ready(function() {
-
+document.addEventListener('DOMContentLoaded', function(){
 
 
 
@@ -436,5 +435,9 @@ m = new Module(function(){
 
 
 }, "Main module");
-    
-});
+
+
+
+
+
+}, false);    
