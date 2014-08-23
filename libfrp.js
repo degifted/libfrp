@@ -45,12 +45,20 @@ Module.prototype.connect = function(wires, direction){
             throw "Module \"" + this.name + "\" does not have \"" + wireName + "\" wire.";
         switch (direction){
             case "in":
+                if (wire1.connectedWires.indexOf(wire2) != -1)
+                    throw "Wire \"" + this.parentModule.name + "\"::\"" + wire1.name + "\" is already conected to \"" + this.name + "\"::\"" + wire2.name + "\" wire.";
                 wire1.connectWire(wire2);
                 break;
             case "out":
+                if (wire2.connectedWires.indexOf(wire1) != -1)
+                    throw "Wire \"" + this.name + "\"::\"" + wire2.name + "\" is already conected to \"" + this.parentModule.name + "\"::\"" + wire1.name + "\" wire.";
                 wire2.connectWire(wire1);
                 break;
             default:
+                if (wire1.connectedWires.indexOf(wire2) != -1)
+                    throw "Wire \"" + this.parentModule.name + "\"::\"" + wire1.name + "\" is already conected to \"" + this.name + "\"::\"" + wire2.name + "\" wire.";
+                if (wire2.connectedWires.indexOf(wire1) != -1)
+                    throw "Wire \"" + this.name + "\"::\"" + wire2.name + "\" is already conected to \"" + this.parentModule.name + "\"::\"" + wire1.name + "\" wire.";
                 wire1.connectWire(wire2);
                 wire2.connectWire(wire1);
                 break;
@@ -116,12 +124,13 @@ Module.prototype.recall = function(storageCell){
 
 Module.prototype.generateDot = function(){
     var module = this;
-    var dot = "digraph G {\n"
-        + "graph [rankdir = LR, ranksep = 2, label=\"" + module.name + "\"];\n"
+    var dot = "digraph \"\" {\n"
+        + "graph [rankdir = LR, ranksep = 1, label=\"" + module.name + "\"];\n"
         + "node [shape = record];\n"
+        + "edge [penwidth = 1.5];\n"
         + "splines = true;\n"
         + "overlap = false;\n"
-        + "nodesep = 0.6;\n"
+        + "nodesep = 0.5;\n";
     var units = module.units;
     var outPortsPerUnit = [];
     var adjacentModules = [];
@@ -153,11 +162,11 @@ Module.prototype.generateDot = function(){
                 var srcPort = srcPorts[idx2].portName;
                 var storageCell = Object.keys(module.connectedStorage).filter(function(storageCell){return module.connectedStorage[storageCell] == wire});
                 if (storageCell.length)
-                    dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Storage:" + storageCell[0] + ":w [label=\"" + wire.name + "\"];\n";
+                    dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Storage:" + storageCell[0] + ":w [tooltip=\"" + wire.name + "\"];\n";
                 for (var idx3 in dstPorts){
                     var dstUnitId = units.indexOf(dstPorts[idx3].unit);
                     var dstPort = dstPorts[idx3].portName;
-                    dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Unit" + dstUnitId + ":" + dstPort + ":w [label=\"" + wire.name + "\"];\n";
+                    dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Unit" + dstUnitId + ":" + dstPort + ":w [tooltip=\"" + wire.name + "\"];\n";
                 }
             }
             if (wire.connectedWires){
@@ -172,7 +181,7 @@ Module.prototype.generateDot = function(){
                     for (var idx3 in srcPorts){
                         var srcUnitId = units.indexOf(srcPorts[idx3].unit);
                         var srcPort = srcPorts[idx3].portName;
-                        dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Module" + adjacentModuleId + ":" + adjacentModuleWire.name + "_in:w [label=\"" + wire.name + "\"];\n";
+                        dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Module" + adjacentModuleId + ":" + adjacentModuleWire.name + "_in:w [tooltip=\"" + wire.name + "\"];\n";
                     }
                 }
             }
@@ -195,11 +204,11 @@ Module.prototype.generateDot = function(){
                     for (var idx4 in dstPorts){
                         var dstUnitId = units.indexOf(dstPorts[idx4].unit);
                         var dstPort = dstPorts[idx4].portName;
-                        dot += "Module" + adjacentModuleId + ":" + adjacentModuleWire.name + "_out:e -> Unit" + dstUnitId + ":" + dstPort + ":w [label=\"" + parentdModuleWire.name + "\"];\n";
+                        dot += "Module" + adjacentModuleId + ":" + adjacentModuleWire.name + "_out:e -> Unit" + dstUnitId + ":" + dstPort + ":w [tooltip=\"" + parentdModuleWire.name + "\"];\n";
                     }
                     var storageCell = Object.keys(module.connectedStorage).filter(function(storageCell){return module.connectedStorage[storageCell] == parentdModuleWire});
                     if (storageCell.length)
-                        dot += "Module" + adjacentModuleId + ":" + adjacentModuleWire.name + "_out:e -> Storage:" + storageCell[0] + ":w [label=\"" + parentdModuleWire.name + "\"];\n";
+                        dot += "Module" + adjacentModuleId + ":" + adjacentModuleWire.name + "_out:e -> Storage:" + storageCell[0] + ":w [tooltip=\"" + parentdModuleWire.name + "\"];\n";
                     }
             }
         }
@@ -213,7 +222,7 @@ Module.prototype.generateDot = function(){
             .map(function(port){return "<" + port + "_out>" + port})
             .toString().replace(/,/g, "|");
         var adjacentModuleName = module.modules[adjacentModuleId].name;
-        dot += "Module" + adjacentModuleId + " [label=\"{{" + srcPorts + "}|" + adjacentModuleName + "|{" + dstPorts + "}}\", style=bold];\n";
+        dot += "Module" + adjacentModuleId + " [label=\"{{" + srcPorts + "}|" + adjacentModuleName + "|{" + dstPorts + "}}\", style=filled, fillcolor=gainsboro];\n";
     }
     dot += "\n";
     var storageCells = Object.keys(module.connectedStorage);
@@ -221,16 +230,18 @@ Module.prototype.generateDot = function(){
         var inPorts = storageCells
             .map(function(port){return "<" + port + ">" + port})
             .toString().replace(/,/g, "|");
-        dot += "Storage [label=\"{{" + inPorts + "}|Storage|{}}\"];\n\n";
+        dot += "Storage [label=\"{{" + inPorts + "}|Storage}\" style=rounded];\n\n";
     }
     dot += "}";
     return dot;
 }
 
 Module.prototype.showDiagram = function(){
-    var img = new Image();
-    img.src = "https://chart.googleapis.com/chart?cht=gv&chl=" + encodeURI(this.generateDot());
-    document.body.insertBefore(img, document.body.firstChild);
+    //var img = new Image();
+    //img.src = "https://chart.googleapis.com/chart?cht=gv&chl=" + encodeURI(this.generateDot());
+    //img.src = "http://gorokh.com/cgi-bin/dot2svg.cgi?" + encodeURI(this.generateDot());
+    //document.body.insertBefore(img, document.body.firstChild);
+    window.open("http://gorokh.com/cgi-bin/dot2svg.cgi?" + encodeURI(this.generateDot()));
 }
 
 
