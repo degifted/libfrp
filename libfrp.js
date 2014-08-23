@@ -117,12 +117,14 @@ Module.prototype.recall = function(storageCell){
 Module.prototype.generateDot = function(){
     var module = this;
     var dot = "digraph G {\n"
-        + "graph [rankdir = LR,ranksep=2,overlap = false,splines = true,label=\"" + module.name + "\"];\n"
-        + "node[shape=record];\n\n";
-
+        + "graph [rankdir = LR, ranksep = 2, label=\"" + module.name + "\"];\n"
+        + "node [shape = record];\n"
+        + "splines = true;\n"
+        + "overlap = false;\n"
+        + "nodesep = 0.6;\n"
     var units = module.units;
     var outPortsPerUnit = [];
-    var childModules = [];
+    var adjacentModules = [];
     for (var idx in units){
         var unit = units[idx];
         var outPorts = Object.keys(unit.portBindings)
@@ -147,9 +149,12 @@ Module.prototype.generateDot = function(){
             var dstPorts = wire.connectedUnits.filter(function(port){return outPortsPerUnit[units.indexOf(port.unit)].indexOf(port.portName) == -1});
             var srcPorts = wire.connectedUnits.filter(function(port){return outPortsPerUnit[units.indexOf(port.unit)].indexOf(port.portName) != -1});
             for (var idx2 in srcPorts){
+                var srcUnitId = units.indexOf(srcPorts[idx2].unit);
+                var srcPort = srcPorts[idx2].portName;
+                var storageCell = Object.keys(module.connectedStorage).filter(function(storageCell){return module.connectedStorage[storageCell] == wire});
+                if (storageCell.length)
+                    dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Storage:" + storageCell[0] + ":w [label=\"" + wire.name + "\"];\n";
                 for (var idx3 in dstPorts){
-                    var srcUnitId = units.indexOf(srcPorts[idx2].unit);
-                    var srcPort = srcPorts[idx2].portName;
                     var dstUnitId = units.indexOf(dstPorts[idx3].unit);
                     var dstPort = dstPorts[idx3].portName;
                     dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Unit" + dstUnitId + ":" + dstPort + ":w [label=\"" + wire.name + "\"];\n";
@@ -157,17 +162,17 @@ Module.prototype.generateDot = function(){
             }
             if (wire.connectedWires){
                 for (var idx2 in wire.connectedWires){
-                    var childModuleWire = wire.connectedWires[idx2];
-                    var childModule = childModuleWire.module;
-                    var childModuleId = module.modules.indexOf(childModule);
-                    if (!childModules[childModuleId])
-                        childModules[childModuleId] = {"srcPorts": {}, "dstPorts": {}};
+                    var adjacentModuleWire = wire.connectedWires[idx2];
+                    var adjacentModule = adjacentModuleWire.module;
+                    var adjacentModuleId = module.modules.indexOf(adjacentModule);
+                    if (!adjacentModules[adjacentModuleId])
+                        adjacentModules[adjacentModuleId] = {"srcPorts": {}, "dstPorts": {}};
                     if (srcPorts.length)
-                        childModules[childModuleId].srcPorts[childModuleWire.name] = true;
+                        adjacentModules[adjacentModuleId].srcPorts[adjacentModuleWire.name] = true;
                     for (var idx3 in srcPorts){
                         var srcUnitId = units.indexOf(srcPorts[idx3].unit);
                         var srcPort = srcPorts[idx3].portName;
-                        dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Module" + childModuleId + ":" + childModuleWire.name + "_in:w [label=\"" + wire.name + "\"];\n";
+                        dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Module" + adjacentModuleId + ":" + adjacentModuleWire.name + "_in:w [label=\"" + wire.name + "\"];\n";
                     }
                 }
             }
@@ -175,37 +180,40 @@ Module.prototype.generateDot = function(){
     }
     dot += "\n";
     for (var idx in module.modules){
-        var childModuleId = idx;
-        var childModuleBus = module.modules[idx].bus;
-        if (!childModules[childModuleId])
-            childModules[childModuleId] = {"srcPorts": {}, "dstPorts": {}};
-        for (var idx2 in childModuleBus){
-            var childModuleWire = childModuleBus[idx2];
-            for (var idx3 in childModuleWire.connectedWires){
-                var parentdModuleWire = childModuleWire.connectedWires[idx3];
+        var adjacentModuleId = idx;
+        var adjacentModuleBus = module.modules[idx].bus;
+        if (!adjacentModules[adjacentModuleId])
+            adjacentModules[adjacentModuleId] = {"srcPorts": {}, "dstPorts": {}};
+        for (var idx2 in adjacentModuleBus){
+            var adjacentModuleWire = adjacentModuleBus[idx2];
+            for (var idx3 in adjacentModuleWire.connectedWires){
+                var parentdModuleWire = adjacentModuleWire.connectedWires[idx3];
                 if (Object.keys(module.bus).filter(function(wireName){return module.bus[wireName] == parentdModuleWire}).length){
                     var dstPorts = parentdModuleWire.connectedUnits.filter(function(port){return outPortsPerUnit[units.indexOf(port.unit)].indexOf(port.portName) == -1});
                     if (dstPorts.length)
-                        childModules[childModuleId].dstPorts[childModuleWire.name] = true;
+                        adjacentModules[adjacentModuleId].dstPorts[adjacentModuleWire.name] = true;
                     for (var idx4 in dstPorts){
                         var dstUnitId = units.indexOf(dstPorts[idx4].unit);
                         var dstPort = dstPorts[idx4].portName;
-                        dot += "Module" + childModuleId + ":" + childModuleWire.name + "_out:e -> Unit" + dstUnitId + ":" + dstPort + ":w [label=\"" + parentdModuleWire.name + "\"];\n";
+                        dot += "Module" + adjacentModuleId + ":" + adjacentModuleWire.name + "_out:e -> Unit" + dstUnitId + ":" + dstPort + ":w [label=\"" + parentdModuleWire.name + "\"];\n";
                     }
-                }
+                    var storageCell = Object.keys(module.connectedStorage).filter(function(storageCell){return module.connectedStorage[storageCell] == parentdModuleWire});
+                    if (storageCell.length)
+                        dot += "Module" + adjacentModuleId + ":" + adjacentModuleWire.name + "_out:e -> Storage:" + storageCell[0] + ":w [label=\"" + parentdModuleWire.name + "\"];\n";
+                    }
             }
         }
     }
     dot += "\n";
-    for (var childModuleId in childModules){
-        var srcPorts = Object.keys(childModules[childModuleId].srcPorts)
+    for (var adjacentModuleId in adjacentModules){
+        var srcPorts = Object.keys(adjacentModules[adjacentModuleId].srcPorts)
             .map(function(port){return "<" + port + "_in>" + port})
             .toString().replace(/,/g, "|");
-        var dstPorts = Object.keys(childModules[childModuleId].dstPorts)
+        var dstPorts = Object.keys(adjacentModules[adjacentModuleId].dstPorts)
             .map(function(port){return "<" + port + "_out>" + port})
             .toString().replace(/,/g, "|");
-        var childModuleName = module.modules[childModuleId].name;
-        dot += "Module" + childModuleId + " [label=\"{{" + srcPorts + "}|" + childModuleName + "|{" + dstPorts + "}}\"];\n";
+        var adjacentModuleName = module.modules[adjacentModuleId].name;
+        dot += "Module" + adjacentModuleId + " [label=\"{{" + srcPorts + "}|" + adjacentModuleName + "|{" + dstPorts + "}}\", style=bold];\n";
     }
     dot += "\n";
     var storageCells = Object.keys(module.connectedStorage);
@@ -214,17 +222,7 @@ Module.prototype.generateDot = function(){
             .map(function(port){return "<" + port + ">" + port})
             .toString().replace(/,/g, "|");
         dot += "Storage [label=\"{{" + inPorts + "}|Storage|{}}\"];\n\n";
-        for (var idx in storageCells){
-            var wire = module.connectedStorage[storageCells[idx]];
-            var srcPorts = wire.connectedUnits.filter(function(port){return outPortsPerUnit[units.indexOf(port.unit)].indexOf(port.portName) != -1});
-            for (var idx2 in srcPorts){
-                    var srcUnitId = units.indexOf(srcPorts[idx2].unit);
-                    var srcPort = srcPorts[idx2].portName;
-                    dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Storage:" + storageCells[idx] + ":w [label=\"" + wire.name + "\"];\n";
-            }
-        }
     }
-
     dot += "}";
     return dot;
 }
