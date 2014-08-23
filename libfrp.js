@@ -227,6 +227,13 @@ Module.prototype.generateDot = function(){
     return dot;
 }
 
+Module.prototype.showDiagram = function(){
+    var img = new Image();
+    img.src = "https://chart.googleapis.com/chart?cht=gv&chl=" + encodeURI(this.generateDot());
+    document.body.insertBefore(img, document.body.firstChild);
+}
+
+
 Unit = function(callback, name) {
         return [callback, name];
 }
