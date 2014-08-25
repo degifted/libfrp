@@ -46,19 +46,19 @@ Module.prototype.connect = function(wires, direction){
         switch (direction){
             case "in":
                 if (wire1.connectedWires.indexOf(wire2) != -1)
-                    throw "Wire \"" + this.parentModule.name + "\"::\"" + wire1.name + "\" is already conected to \"" + this.name + "\"::\"" + wire2.name + "\" wire.";
+                    throw new Error("Wire \"" + this.parentModule.name + "\"::\"" + wire1.name + "\" is already conected to \"" + this.name + "\"::\"" + wire2.name + "\" wire.");
                 wire1.connectWire(wire2);
                 break;
             case "out":
                 if (wire2.connectedWires.indexOf(wire1) != -1)
-                    throw "Wire \"" + this.name + "\"::\"" + wire2.name + "\" is already conected to \"" + this.parentModule.name + "\"::\"" + wire1.name + "\" wire.";
+                    throw new Error("Wire \"" + this.name + "\"::\"" + wire2.name + "\" is already conected to \"" + this.parentModule.name + "\"::\"" + wire1.name + "\" wire.");
                 wire2.connectWire(wire1);
                 break;
             default:
                 if (wire1.connectedWires.indexOf(wire2) != -1)
-                    throw "Wire \"" + this.parentModule.name + "\"::\"" + wire1.name + "\" is already conected to \"" + this.name + "\"::\"" + wire2.name + "\" wire.";
+                    throw new Error("Wire \"" + this.parentModule.name + "\"::\"" + wire1.name + "\" is already conected to \"" + this.name + "\"::\"" + wire2.name + "\" wire.");
                 if (wire2.connectedWires.indexOf(wire1) != -1)
-                    throw "Wire \"" + this.name + "\"::\"" + wire2.name + "\" is already conected to \"" + this.parentModule.name + "\"::\"" + wire1.name + "\" wire.";
+                    throw new Error("Wire \"" + this.name + "\"::\"" + wire2.name + "\" is already conected to \"" + this.parentModule.name + "\"::\"" + wire1.name + "\" wire.");
                 wire1.connectWire(wire2);
                 wire2.connectWire(wire1);
                 break;
@@ -303,7 +303,7 @@ Wire.prototype._sendToUnits = function(signal){
         var portName = this.connectedUnits[idx].portName;
         if (unit.inputPorts.indexOf(portName) != -1){
             if (unit.pendingInputData.hasOwnProperty(portName))
-                console.log("Warning: signal on \"" + this.name + "\" wire that came to port \"" + portName + "\" of Unit \"" + unit.name + "\" was overwritten by another one.");
+                throw new Error("Out of sync: signal on \"" + this.name + "\" wire that came to port \"" + portName + "\" of Unit \"" + unit.name + "\" was overwritten by another one.");
             unit.pendingInputData[portName] = signal;
             if (Object.keys(unit.pendingInputData).length == unit.inputPorts.length){
                 var inputs = unit.pendingInputData;
