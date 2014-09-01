@@ -40,9 +40,12 @@ Module.prototype.connect = function(wires, direction){
         var wire1 = this.parentModule.bus[wires[wireName]];
         var wire2 = this.bus[wireName];
         if (!wire1)
-            throw "Module \"" + this.parentModule.name + "\" does not have \"" + wires[wireName] + "\" wire.";
+            throw new Error("Module \"" + this.parentModule.name + "\" does not have \"" + wires[wireName] + "\" wire.");
         if (!wire2)
-            throw "Module \"" + this.name + "\" does not have \"" + wireName + "\" wire.";
+            throw new Error("Module \"" + this.name + "\" does not have \"" + wireName + "\" wire.");
+        if (wire1.hasOwnProperty("holdedValue") ^ wire2.hasOwnProperty("holdedValue"))
+            throw new Error("Wire \"" + this.parentModule.name + "\"::\""+ wire1.name + "\" is " + (wire1.hasOwnProperty("holdedValue") ? "level" : "edge") + " triggered, whereas " +
+                "wire \"" + this.name + "\"::\"" + wire2.name + "\" is " + (wire2.hasOwnProperty("holdedValue") ? "level" : "edge") + " triggered.");
         switch (direction){
             case "in":
                 if (wire1.connectedWires.indexOf(wire2) != -1)
@@ -76,9 +79,12 @@ Module.prototype.Unit = function(arg1, arg2) {
         unit.callback = arg1[0];
         unit.name = arg1[1];
     }
-    unit.inputPorts = unit.callback.toString().match(/function.*\(([\w,\s]*)\)/)[1].split(/\s*,\s*/);
+    unit.outputPorts = {};
+    unit.inputPorts = {};
+    unit.callback.toString().match(/function.*\(([\w,\s]*)\)/)[1].split(/\s*,\s*/).forEach(function(portName){
+        unit.inputPorts[portName] = null;
+    });
     unit.pendingInputData = {};
-    unit.portBindings = {};
     unit.module = this;
     this.units.push(unit);
     return unit;
@@ -136,17 +142,14 @@ Module.prototype.generateDot = function(){
     var adjacentModules = [];
     for (var idx in units){
         var unit = units[idx];
-        var outPorts = Object.keys(unit.portBindings)
-            .filter(function(port){return unit.inputPorts.indexOf(port) == -1;})
+        var outPorts = Object.keys(unit.outputPorts)
             .map(function(port){return "<" + port + ">" + port})
             .toString().replace(/,/g, "|");
-        var inPorts = Object.keys(unit.portBindings)
-            .filter(function(port){return unit.inputPorts.indexOf(port) != -1;})
+        var inPorts = Object.keys(unit.inputPorts)
             .map(function(port){return "<" + port + ">" + port})
             .toString().replace(/,/g, "|");
         dot += "Unit" + idx + " [label=\"{{" + inPorts + "}|" + unit.name + "|{" + outPorts + "}}\"];\n";
-        outPortsPerUnit[idx] = Object.keys(unit.portBindings)
-            .filter(function(port){return unit.inputPorts.indexOf(port) == -1;});
+        outPortsPerUnit[idx] = Object.keys(unit.outputPorts);
     }
     dot += "\n";
 
@@ -166,7 +169,7 @@ Module.prototype.generateDot = function(){
                 for (var idx3 in dstPorts){
                     var dstUnitId = units.indexOf(dstPorts[idx3].unit);
                     var dstPort = dstPorts[idx3].portName;
-                    dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Unit" + dstUnitId + ":" + dstPort + ":w [tooltip=\"" + wire.name + "\"];\n";
+                    dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Unit" + dstUnitId + ":" + dstPort + ":w [tooltip=\"" + wire.name + "\"" + (wire.hasOwnProperty("holdedValue") ? ",arrowhead=dot" : "") + "];\n";
                 }
             }
             if (wire.connectedWires){
@@ -181,7 +184,7 @@ Module.prototype.generateDot = function(){
                     for (var idx3 in srcPorts){
                         var srcUnitId = units.indexOf(srcPorts[idx3].unit);
                         var srcPort = srcPorts[idx3].portName;
-                        dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Module" + adjacentModuleId + ":" + adjacentModuleWire.name + "_in:w [tooltip=\"" + wire.name + "\"];\n";
+                        dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Module" + adjacentModuleId + ":" + adjacentModuleWire.name + "_in:w [tooltip=\"" + wire.name + "\"" + (wire.hasOwnProperty("holdedValue") ? ",arrowhead=dot" : "") + "];\n";
                     }
                 }
             }
@@ -204,7 +207,7 @@ Module.prototype.generateDot = function(){
                     for (var idx4 in dstPorts){
                         var dstUnitId = units.indexOf(dstPorts[idx4].unit);
                         var dstPort = dstPorts[idx4].portName;
-                        dot += "Module" + adjacentModuleId + ":" + adjacentModuleWire.name + "_out:e -> Unit" + dstUnitId + ":" + dstPort + ":w [tooltip=\"" + parentdModuleWire.name + "\"];\n";
+                        dot += "Module" + adjacentModuleId + ":" + adjacentModuleWire.name + "_out:e -> Unit" + dstUnitId + ":" + dstPort + ":w [tooltip=\"" + parentdModuleWire.name + "\"" + (parentdModuleWire.hasOwnProperty("holdedValue") ? ",arrowhead=dot" : "") + "];\n";
                     }
                     var storageCell = Object.keys(module.connectedStorage).filter(function(storageCell){return module.connectedStorage[storageCell] == parentdModuleWire});
                     if (storageCell.length)
@@ -237,10 +240,6 @@ Module.prototype.generateDot = function(){
 }
 
 Module.prototype.showDiagram = function(){
-    //var img = new Image();
-    //img.src = "https://chart.googleapis.com/chart?cht=gv&chl=" + encodeURI(this.generateDot());
-    //img.src = "http://gorokh.com/cgi-bin/dot2svg.cgi?" + encodeURI(this.generateDot());
-    //document.body.insertBefore(img, document.body.firstChild);
     window.open("http://gorokh.com/cgi-bin/dot2svg.cgi?" + encodeURI(this.generateDot()));
 }
 
@@ -249,11 +248,13 @@ Unit = function(callback, name) {
         return [callback, name];
 }
 
-Unit.prototype.connect = function(portWirePairs){
+Unit.prototype.connect = function(portWirePairs, mode){
     for (var portName in portWirePairs){
         var wireName = portWirePairs[portName];
         if (this.module.bus[wireName]){
             var wire = this.module.bus[wireName];
+            if (wire.hasOwnProperty("holdedValue") ^ (mode == "level"))
+                throw Error("Wire " + wire.name + " is already configured as " + (wire.hasOwnProperty("holdedValue") ? "level" : "edge") + " triggered.");
         } else {
             var wire = this.module.bus.newWire(wireName);
             wire.module = this.module;
@@ -262,14 +263,20 @@ Unit.prototype.connect = function(portWirePairs){
             "unit": this,
             "portName": portName
         });
-        this.portBindings[portName] = wire;
+        if (mode == "level"){
+            wire.holdedValue = null;
+        }
+        if (this.inputPorts.hasOwnProperty(portName))
+            this.inputPorts[portName] = wire;
+        else
+            this.outputPorts[portName] = wire;
     }
     return this;
 }
 
 Unit.prototype.yield = function(output){
     for (var portName in output){
-        var wire = this.portBindings[portName];
+        var wire = this.outputPorts[portName];
         wire.send(output[portName], this);
     }
 }
@@ -287,6 +294,10 @@ Bus.prototype.newWire = function(wireName){
 
 Wire = function(){}
 
+Wire.prototype.clear = function(){
+    this.holdedValue = null;
+}
+
 Wire.prototype.send = function(signal, sender){
     this.trace = {
         "sender": sender,
@@ -298,17 +309,37 @@ Wire.prototype.send = function(signal, sender){
 }
 
 Wire.prototype._sendToUnits = function(signal){
-    for (var idx in this.connectedUnits){
-        var unit = this.connectedUnits[idx].unit;
-        var portName = this.connectedUnits[idx].portName;
-        if (unit.inputPorts.indexOf(portName) != -1){
-            if (unit.pendingInputData.hasOwnProperty(portName))
-                throw new Error("Out of sync: signal on \"" + this.name + "\" wire that came to port \"" + portName + "\" of Unit \"" + unit.name + "\" was overwritten by another one.");
-            unit.pendingInputData[portName] = signal;
-            if (Object.keys(unit.pendingInputData).length == unit.inputPorts.length){
+    if (this.hasOwnProperty("holdedValue")){
+        var oldHoldedValue = this.holdedValue;
+        this.holdedValue = signal;
+    }
+    if (oldHoldedValue == null){
+        for (var idx in this.connectedUnits){
+            var unit = this.connectedUnits[idx].unit;
+            var portName = this.connectedUnits[idx].portName;
+            if (unit.inputPorts.hasOwnProperty(portName)){
+                if (unit.pendingInputData.hasOwnProperty(portName)){
+                    var err = new Error("Out of sync: signal on \"" + this.name + "\" wire that came to port \"" + portName + "\" of Unit \"" + unit.name + "\" was overwritten by another one.");
+                    err.unit = unit;
+                    err.wire = this;
+                    throw(err);
+                }
                 var inputs = unit.pendingInputData;
-                unit.pendingInputData = {};
-                unit.callback.apply(unit, unit.inputPorts.map(function(portName){return inputs[portName]}));
+                for (var bindedPortName in unit.inputPorts)
+                    if (unit.inputPorts[bindedPortName].holdedValue != null)
+                        inputs[bindedPortName] = unit.inputPorts[bindedPortName].holdedValue;
+                unit.pendingInputData[portName] = signal;
+                if (Object.keys(inputs).length >= Object.keys(unit.inputPorts).length){
+                    unit.pendingInputData = {};
+                    try{
+                        unit.callback.apply(unit, Object.keys(unit.inputPorts).map(function(portName){return inputs[portName]}));
+                    }
+                    catch(err){
+                        err.message = "Unit \"" + unit.name + "\" threw an exeption: " + err.message;
+                        err.unit = unit;
+                        throw(err);
+                    }
+                }
             }
         }
     }
