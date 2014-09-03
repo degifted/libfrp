@@ -17,35 +17,35 @@ $(document).ready(function() {
 
 
         this.Unit (
-            function (inA, inB) {
+            function (inA1, inB1) {
                 this.yield({
-                    "outA": inA + inB,
-                    "outB": 3
+                    "outA1": inA1 + inB1,
+                    "outB1": 3
                 });
             }, "Unit m1")
             .connect({
-                "inA": "w1",
+                "inA1": "w1",
             }, "level")
             .connect({
-                "inB": "w2",
-                "outA": "w3",
-                "outB": "w4"
+                "inB1": "w2",
+                "outA1": "w3",
+                "outB1": "w4"
             });
 
 
 
         this.Unit (
-            function (inA, inB) {
+            function (inA2, inB2) {
                 this.yield({
-                    "outA": inA - inB,
-                    "outB": 33
+                    "outA2": inA2 - inB2,
+                    "outB2": 33
                 });
             }, "Unit m2")
             .connect({
-                "inA": "w3",
-                "inB": "w4",
-                "outA": "w5",
-                "outB": "w6"
+                "inA2": "w3",
+                "inB2": "w4",
+                "outA2": "w5",
+                "outB2": "w6"
             });
 
 
@@ -79,6 +79,10 @@ $(document).ready(function() {
         });
 
 
+        this.bus.newWire("w21");
+        this.bus.w21.module = this;
+        this.bus.newWire("w22");
+        this.bus.w22.module = this;
 
         this.Module(function(){
             this.Unit(function(p1, p2){
@@ -89,8 +93,7 @@ $(document).ready(function() {
             .connect({"p4": "p4"}, "level");
 
         }, "Test Module")
-        .connect({"p4": "w1", "p2": "w1", "p1": "w3", "p2": "w4"});
-
+        .connect({"p3": "w2", "p4": "w1", "p2": "w1", "p1": "w21", "p2": "w22"});
 
 
 

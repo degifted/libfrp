@@ -169,7 +169,7 @@ Module.prototype.generateDot = function(){
                 for (var idx3 in dstPorts){
                     var dstUnitId = units.indexOf(dstPorts[idx3].unit);
                     var dstPort = dstPorts[idx3].portName;
-                    dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Unit" + dstUnitId + ":" + dstPort + ":w [tooltip=\"" + wire.name + "\"" + (wire.hasOwnProperty("holdedValue") ? ",arrowhead=dot" : "") + "];\n";
+                    dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Unit" + dstUnitId + ":" + dstPort + ":w [tooltip=\"" + wire.name + "\"" + (wire.hasOwnProperty("holdedValue") ? ",arrowhead=diamond" : "") + "];\n";
                 }
             }
             if (wire.connectedWires){
@@ -184,7 +184,7 @@ Module.prototype.generateDot = function(){
                     for (var idx3 in srcPorts){
                         var srcUnitId = units.indexOf(srcPorts[idx3].unit);
                         var srcPort = srcPorts[idx3].portName;
-                        dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Module" + adjacentModuleId + ":" + adjacentModuleWire.name + "_in:w [tooltip=\"" + wire.name + "\"" + (wire.hasOwnProperty("holdedValue") ? ",arrowhead=dot" : "") + "];\n";
+                        dot += "Unit" + srcUnitId + ":" + srcPort + ":e -> Module" + adjacentModuleId + ":" + adjacentModuleWire.name + "_in:w [tooltip=\"" + wire.name + "\"" + (wire.hasOwnProperty("holdedValue") ? ",arrowhead=diamond" : "") + "];\n";
                     }
                 }
             }
@@ -207,7 +207,7 @@ Module.prototype.generateDot = function(){
                     for (var idx4 in dstPorts){
                         var dstUnitId = units.indexOf(dstPorts[idx4].unit);
                         var dstPort = dstPorts[idx4].portName;
-                        dot += "Module" + adjacentModuleId + ":" + adjacentModuleWire.name + "_out:e -> Unit" + dstUnitId + ":" + dstPort + ":w [tooltip=\"" + parentdModuleWire.name + "\"" + (parentdModuleWire.hasOwnProperty("holdedValue") ? ",arrowhead=dot" : "") + "];\n";
+                        dot += "Module" + adjacentModuleId + ":" + adjacentModuleWire.name + "_out:e -> Unit" + dstUnitId + ":" + dstPort + ":w [tooltip=\"" + parentdModuleWire.name + "\"" + (parentdModuleWire.hasOwnProperty("holdedValue") ? ",arrowhead=diamond" : "") + "];\n";
                     }
                     var storageCell = Object.keys(module.connectedStorage).filter(function(storageCell){return module.connectedStorage[storageCell] == parentdModuleWire});
                     if (storageCell.length)
@@ -369,3 +369,87 @@ Wire.prototype.connectWire = function(wire){
 Wire.prototype.connectProbe = function(callback){
     this.connectedProbes.push(callback);
 }
+
+Wire.prototype.generateDot = function(callback){
+    var index = [];
+    var index2 = [];
+    var unknowns = 0;
+
+    function printNodes(node){
+        var out = "";
+        if (node && index.indexOf(node) == -1){
+            index.push(node);
+            index.push(node.module);
+            if (node instanceof Unit){
+                var outPorts = Object.keys(node.outputPorts)
+                    .map(function(port){return "<" + port + ">" + port})
+                    .toString().replace(/,/g, "|");
+                var inPorts = Object.keys(node.inputPorts)
+                    .map(function(port){return "<" + port + ">" + port})
+                    .toString().replace(/,/g, "|");
+                out += "\nsubgraph cluster" + index.indexOf(node.module) + "{\n  label=\"" + node.module.name + "\";\n"
+                    + "  Unit" + index.indexOf(node) + " [label=\"{{" + inPorts + "}|" + node.name + "|{" + outPorts + "}}\"];\n"
+                    + "}\n";
+                for (var portName in node.inputPorts){
+                    if (node.inputPorts[portName].trace)
+                        out += printNodes(node.inputPorts[portName].trace.sender);
+                }
+            }
+            if (node instanceof Wire){
+                out += "\nsubgraph cluster" + index.indexOf(node.module) + "{\n  label=\"" + node.module.name + "\";\n"
+                    + "  Wire" + index.indexOf(node) + " [label=\"" + node.name + "\" shape=circle];\n}\n";
+                if (node.trace)
+                    out += printNodes(node.trace.sender);
+            }
+        }
+        return out;
+    }
+
+    function printEdges(receiver){
+        var out = "";
+        if (receiver && index2.indexOf(receiver) == -1){
+            index2.push(receiver);
+            if (receiver instanceof Unit){
+                for (var portName in receiver.inputPorts){
+                    var sender = receiver.inputPorts[portName].trace.sender;
+                    var wire = receiver.inputPorts[portName];
+                    if (sender instanceof Unit){
+                        out += "Unit" + index.indexOf(sender) + ":" + Object.keys(sender.outputPorts).filter(function(port){return wire == sender.outputPorts[port]})[0] + ":e -> " + "Unit" + index.indexOf(receiver) + ":" + portName + ":w [tooltip=\"" + wire.name + "\"" + (wire.hasOwnProperty("holdedValue") ? ",arrowhead=diamond" : "") + "];\n";
+                    } else if (sender instanceof Wire){
+                        out += "Wire" + index.indexOf(sender) + " -> " + "Unit" + index.indexOf(receiver) + ":" + portName + ":w [tooltip=\"" + wire.name + "\"" + (wire.hasOwnProperty("holdedValue") ? ",arrowhead=diamond" : "") + "];\n";
+                    } else {
+                        out += "Unknown" + unknowns++ + " -> " + "Unit" + index.indexOf(receiver) + ":" + portName + ":w;\n";
+                    }
+                    out += printEdges(sender);
+                }
+            } else if (receiver instanceof Wire){
+                if (receiver.trace){
+                    var sender = receiver.trace.sender;
+                    if (sender instanceof Unit){
+                        out += "Unit" + index.indexOf(sender) + ":" + Object.keys(sender.outputPorts).filter(function(port){return receiver == sender.outputPorts[port]})[0] + ":e -> " + "Wire" + index.indexOf(receiver) + " [tooltip=\"" + receiver.name + "\"" + (receiver.hasOwnProperty("holdedValue") ? ",arrowhead=diamond" : "") + "];\n";
+                    } else if (sender instanceof Wire){
+                        out += "Wire" + index.indexOf(sender) + " -> " + "Wire" + index.indexOf(receiver) + " [tooltip=\"" + sender.name + " -> " + receiver.name + "\"" + (receiver.hasOwnProperty("holdedValue") ? ",arrowhead=diamond" : "") + "];\n";
+                    } else {
+                        out += "Unknown" + unknowns++ + " -> " + "Wire" + index.indexOf(receiver) + " [tooltip=\"" + receiver.name + "\"" + (receiver.hasOwnProperty("holdedValue") ? ",arrowhead=diamond" : "") + "];\n";
+                    }
+                    out += printEdges(sender);
+                }
+            }
+        }
+        return out;
+    }
+
+    return  "digraph \"\" {\n"
+        + "graph [rankdir = LR, ranksep = 1];\n"
+        + "node [shape = record];\n"
+        + "edge [penwidth = 1.5];\n"
+        + "splines = true;\n"
+        + "overlap = false;\n"
+        + "nodesep = 0.5;\n"
+        + printNodes(this)
+        + "\n"
+        + printEdges(this)
+        + "}\n";
+}
+
+Wire.prototype.showDiagram = Module.prototype.showDiagram;
