@@ -25,7 +25,7 @@ $(document).ready(function() {
             }, "Unit m1")
             .connect({
                 "inA1": "w1",
-            }, "level")
+            }, "level", "bidir")
             .connect({
                 "inB1": "w2",
                 "outA1": "w3",

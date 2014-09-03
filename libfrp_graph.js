@@ -194,6 +194,12 @@ Wire.prototype.generateDot = function(callback){
 
 Module.prototype.showDiagram = function(){
     window.open("http://gorokh.com/cgi-bin/dot2svg.cgi?" + encodeURI(this.generateDot()));
+    /* dot2svg.cgi:
+    #!/bin/bash
+    echo "Content-Type: image/svg+xml"
+    echo
+    printf '%b' "${QUERY_STRING//%/\\x}" | /usr/bin/dot -Tsvg
+    */    
 }
 
 Wire.prototype.showDiagram = Module.prototype.showDiagram;

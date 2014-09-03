@@ -57,6 +57,7 @@ Module.prototype.connect = function(wires, direction){
                     throw new Error("Wire \"" + this.name + "\"::\"" + wire2.name + "\" is already conected to \"" + this.parentModule.name + "\"::\"" + wire1.name + "\" wire.");
                 wire2.connectWire(wire1);
                 break;
+            case "bidir":
             default:
                 if (wire1.connectedWires.indexOf(wire2) != -1)
                     throw new Error("Wire \"" + this.parentModule.name + "\"::\"" + wire1.name + "\" is already conected to \"" + this.name + "\"::\"" + wire2.name + "\" wire.");
@@ -132,23 +133,28 @@ Unit = function(callback, name) {
         return [callback, name];
 }
 
-Unit.prototype.connect = function(portWirePairs, mode){
+Unit.prototype.connect = function(portWirePairs){
+    var isLevelModeFlg = Array.prototype.slice.call(arguments, 1).indexOf("level") != -1;
+    var isBidirModeFlg = Array.prototype.slice.call(arguments, 1).indexOf("bidir") != -1;
     for (var portName in portWirePairs){
         var wireName = portWirePairs[portName];
         if (this.module.bus[wireName]){
             var wire = this.module.bus[wireName];
-            if (wire.hasOwnProperty("holdedValue") ^ (mode == "level"))
+            if (wire.hasOwnProperty("holdedValue") ^ isLevelModeFlg)
                 throw Error("Wire " + wire.name + " is already configured as " + (wire.hasOwnProperty("holdedValue") ? "level" : "edge") + " triggered.");
         } else {
-            var wire = this.module.bus.newWire(wireName);
+            var wire = this.module.bus.newWire(wireName, isLevelModeFlg);
             wire.module = this.module;
         }
         wire.connectedUnits.push({
             "unit": this,
             "portName": portName
         });
-        if (mode == "level"){
-            wire.holdedValue = null;
+        if (isBidirModeFlg){
+            if (this.inputPorts.hasOwnProperty(portName)){
+                this.inputPorts[portName] = wire;
+                this.outputPorts[portName] = wire;
+            } else throw Error("Cannot connect bidirectional wire to an unit without required input port: \"" + portName + "\".");
         }
         if (this.inputPorts.hasOwnProperty(portName))
             this.inputPorts[portName] = wire;
@@ -167,12 +173,15 @@ Unit.prototype.yield = function(output){
 
 Bus = function(){}
 
-Bus.prototype.newWire = function(wireName){
+Bus.prototype.newWire = function(wireName, isLevelModeFlg){
     this[wireName] = new Wire();
     this[wireName].connectedUnits = [];
     this[wireName].connectedWires = [];
     this[wireName].connectedProbes = [];
     this[wireName].name = wireName;
+    if (isLevelModeFlg){
+        this[wireName].holdedValue = null;
+    }
     return this[wireName];
 }
 
