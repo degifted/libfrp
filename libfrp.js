@@ -203,35 +203,32 @@ Wire.prototype.send = function(signal, sender){
 
 Wire.prototype._sendToUnits = function(signal){
     if (this.hasOwnProperty("holdedValue")){
-        var oldHoldedValue = this.holdedValue;
         this.holdedValue = signal;
     }
-    if (oldHoldedValue == null){
-        for (var idx in this.connectedUnits){
-            var unit = this.connectedUnits[idx].unit;
-            var portName = this.connectedUnits[idx].portName;
-            if (unit.inputPorts.hasOwnProperty(portName)){
-                if (unit.pendingInputData.hasOwnProperty(portName)){
-                    var err = new Error("Out of sync: signal on \"" + this.name + "\" wire that came to port \"" + portName + "\" of Unit \"" + unit.name + "\" was overwritten by another one.");
-                    err.unit = unit;
-                    err.wire = this;
-                    throw(err);
+    for (var idx in this.connectedUnits){
+        var unit = this.connectedUnits[idx].unit;
+        var portName = this.connectedUnits[idx].portName;
+        if (unit.inputPorts.hasOwnProperty(portName)){
+            if (unit.pendingInputData.hasOwnProperty(portName)){
+                var err = new Error("Out of sync: signal on \"" + this.name + "\" wire that came to port \"" + portName + "\" of Unit \"" + unit.name + "\" was overwritten by another one.");
+                err.unit = unit;
+                err.wire = this;
+                throw(err);
+            }
+            var inputs = unit.pendingInputData;
+            for (var bindedPortName in unit.inputPorts)
+                if (unit.inputPorts[bindedPortName].holdedValue != null)
+                    inputs[bindedPortName] = unit.inputPorts[bindedPortName].holdedValue;
+            unit.pendingInputData[portName] = signal;
+            if (Object.keys(inputs).length >= Object.keys(unit.inputPorts).length){
+                unit.pendingInputData = {};
+                try{
+                    unit.callback.apply(unit, Object.keys(unit.inputPorts).map(function(portName){return inputs[portName]}));
                 }
-                var inputs = unit.pendingInputData;
-                for (var bindedPortName in unit.inputPorts)
-                    if (unit.inputPorts[bindedPortName].holdedValue != null)
-                        inputs[bindedPortName] = unit.inputPorts[bindedPortName].holdedValue;
-                unit.pendingInputData[portName] = signal;
-                if (Object.keys(inputs).length >= Object.keys(unit.inputPorts).length){
-                    unit.pendingInputData = {};
-                    try{
-                        unit.callback.apply(unit, Object.keys(unit.inputPorts).map(function(portName){return inputs[portName]}));
-                    }
-                    catch(err){
-                        err.message = "Unit \"" + unit.name + "\" threw an exeption: " + err.message;
-                        err.unit = unit;
-                        throw(err);
-                    }
+                catch(err){
+                    err.message = "Unit \"" + unit.name + "\" threw an exeption: " + err.message;
+                    err.unit = unit;
+                    throw(err);
                 }
             }
         }
@@ -261,4 +258,8 @@ Wire.prototype.connectWire = function(wire){
 
 Wire.prototype.connectProbe = function(callback){
     this.connectedProbes.push(callback);
+}
+
+Wire.prototype.disconnectAllProbes = function(){
+    this.connectedProbes = [];
 }
